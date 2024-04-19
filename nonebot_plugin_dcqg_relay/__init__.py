@@ -1,15 +1,20 @@
+import contextlib
 import re
 import sqlite3
 from typing import Union
 
+from nonebot import get_driver, logger, on, on_command, on_regex, require
+from nonebot.adapters.discord import (
+    Bot as dc_Bot,
+    MessageCreateEvent as dc_MessageCreateEvent,
+    MessageDeleteEvent as dc_MessageDeleteEvent,
+)
+from nonebot.adapters.qq import (
+    Bot as qq_Bot,
+    GuildMessageEvent as qq_GuildMessageEvent,
+    MessageDeleteEvent as qq_MessageDeleteEvent,
+)
 from nonebot.plugin import PluginMetadata
-from nonebot.adapters.qq import Bot as qq_Bot
-from nonebot.adapters.discord import Bot as dc_Bot
-from nonebot import on, logger, require, on_regex, get_driver, on_command
-from nonebot.adapters.qq import GuildMessageEvent as qq_GuildMessageEvent
-from nonebot.adapters.qq import MessageDeleteEvent as qq_MessageDeleteEvent
-from nonebot.adapters.discord import MessageCreateEvent as dc_MessageCreateEvent
-from nonebot.adapters.discord import MessageDeleteEvent as dc_MessageDeleteEvent
 
 require("nonebot_plugin_apscheduler")
 from nonebot_plugin_apscheduler import scheduler
@@ -17,21 +22,19 @@ from nonebot_plugin_apscheduler import scheduler
 require("nonebot_plugin_localstore")
 import nonebot_plugin_localstore as store
 
-from .init_db import init_db
-from .config import Link, Config, plugin_config
-from .utils import (
-    check_messages,
-    create_dc_to_qq,
-    create_qq_to_dc,
-    delete_dc_to_qq,
-    delete_qq_to_dc,
-)
+from .config import Config, Link, plugin_config
+from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
+from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
+from .utils import check_messages, init_db
 
 __plugin_meta__ = PluginMetadata(
-    name="sync_message_to_discord",
-    description="",
+    name="QQ频道 Discord 互通 ",
+    description="在QQ频道与 Discord 之间同步消息的 nonebot2 插件",
     usage="",
+    type="application",
+    homepage="https://github.com/Autuamn/nonebot-plugin-dcqg-relay",
     config=Config,
+    supported_adapters={"~qq", "~discord"},
 )
 
 
@@ -44,6 +47,8 @@ cache_dir = store.get_cache_dir("sync_message_to_discord")
 data_dir = store.get_data_dir("sync_message_to_discord")
 database_file = store.get_data_file("sync_message_to_discord", "msgid.db")
 config_file = store.get_config_file("sync_message_to_discord", "webhook.json")
+
+just_delete = []
 
 commit_db_m = on_command("commit_db", priority=0, block=True)
 unmatcher = on_regex(
@@ -85,7 +90,8 @@ async def close_db():
 async def commit_db():
     await close_db()
     await connect_db()
-    await commit_db_m.finish("commit!")
+    with contextlib.suppress(LookupError):
+        await commit_db_m.finish("commit!")
 
 
 @unmatcher.handle()
@@ -113,8 +119,8 @@ async def delete_message(
     event: Union[qq_MessageDeleteEvent, dc_MessageDeleteEvent],
 ):
     if isinstance(bot, qq_Bot) and isinstance(event, qq_MessageDeleteEvent):
-        await delete_qq_to_dc(event, dc_bot, conn)
+        await delete_qq_to_dc(event, dc_bot, conn, just_delete)
     elif isinstance(bot, dc_Bot) and isinstance(event, dc_MessageDeleteEvent):
-        await delete_dc_to_qq(event, qq_bot, conn)
+        await delete_dc_to_qq(event, qq_bot, conn, just_delete)
     else:
         logger.error("bot type and event type not match")
