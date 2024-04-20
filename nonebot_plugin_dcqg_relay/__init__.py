@@ -28,7 +28,7 @@ from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
 from .utils import check_messages, init_db
 
 __plugin_meta__ = PluginMetadata(
-    name="QQ频道 Discord 互通 ",
+    name="QQ频道-Discord 互通",
     description="在QQ频道与 Discord 之间同步消息的 nonebot2 插件",
     usage="",
     type="application",
@@ -39,9 +39,9 @@ __plugin_meta__ = PluginMetadata(
 
 
 driver = get_driver()
-channel_links: list[Link] = plugin_config.smd_channel_links
+channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
-unmatch_beginning = plugin_config.smd_unmatch_beginning
+unmatch_beginning = plugin_config.dcqg_relay_unmatch_beginning
 
 cache_dir = store.get_cache_dir("sync_message_to_discord")
 data_dir = store.get_data_dir("sync_message_to_discord")

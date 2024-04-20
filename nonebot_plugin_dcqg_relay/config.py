@@ -14,9 +14,10 @@ class Link(BaseModel):
 
 
 class Config(BaseModel):
-    smd_channel_links: list[Link] = []
+    dcqg_relay_channel_links: list[Link] = []
     """子频道绑定"""
-    smd_unmatch_beginning: list[str] = ["/"]
+    dcqg_relay_unmatch_beginning: list[str] = ["/"]
+    """不转发的消息开头"""
     discord_proxy: Optional[str] = None
 
 

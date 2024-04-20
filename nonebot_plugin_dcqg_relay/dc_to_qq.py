@@ -25,7 +25,7 @@ from PIL import Image
 from .config import Link, plugin_config
 from .utils import get_dc_member_name, get_file_bytes
 
-channel_links: list[Link] = plugin_config.smd_channel_links
+channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
 
 

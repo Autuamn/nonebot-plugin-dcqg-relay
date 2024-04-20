@@ -20,7 +20,7 @@ from nonebot.adapters.qq import (
 
 from .config import Link, plugin_config
 
-channel_links: list[Link] = plugin_config.smd_channel_links
+channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
 discord_proxy = plugin_config.discord_proxy
 
 
