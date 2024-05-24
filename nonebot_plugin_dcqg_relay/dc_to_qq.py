@@ -143,10 +143,10 @@ async def build_qq_message(
     if content := content[text_begin:]:
         qq_message += qq_MessageSegment.text(content)
 
-    if event.mention_everyone:
+    if message.mention_everyone:
         qq_message += qq_MessageSegment.mention_everyone()
 
-    if attachments := event.attachments:
+    if attachments := message.attachments:
         for attachment in attachments:
             if attachment.content_type is not UNSET and re.match(
                 r"image/(gif|jpeg|png|webp)", attachment.content_type, 0
