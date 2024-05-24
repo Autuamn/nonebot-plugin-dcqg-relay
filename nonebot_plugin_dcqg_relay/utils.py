@@ -1,6 +1,4 @@
-from pathlib import Path
 import re
-import sqlite3
 from typing import Optional, Union
 
 import aiohttp
@@ -10,7 +8,7 @@ from nonebot.adapters.discord import (
     MessageCreateEvent as dc_MessageCreateEvent,
     MessageDeleteEvent as dc_MessageDeleteEvent,
 )
-from nonebot.adapters.discord.api import UNSET
+from nonebot.adapters.discord.api import UNSET, Missing
 from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.qq import (
     Bot as qq_Bot,
@@ -67,35 +65,31 @@ async def check_messages(
         )
 
 
-async def init_db(dbpath: Path):
-    conn = sqlite3.connect(dbpath)
-    conn.execute(
-        """CREATE TABLE ID (
-            DCID    INT     NOT NULL,
-            QQID    TEXT    NOT NULL
-        );"""
-    )
-    return conn
-
-
-async def get_dc_member_name(bot: dc_Bot, guild_id: int, user_id: int) -> str:
+async def get_dc_member_name(
+    bot: dc_Bot, guild_id: Missing[int], user_id: int
+) -> tuple[str, str]:
     try:
-        member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
-        if (nick := member.nick) and nick is not UNSET:
-            logger.trace(f"nick: {nick}")
-            return nick
-        elif member.user is not UNSET and (global_name := member.user.global_name):
-            logger.trace(f"global_name: {global_name}")
-            return global_name
+        if guild_id is not UNSET:
+            member = await bot.get_guild_member(guild_id=guild_id, user_id=user_id)
+            if (nick := member.nick) and nick is not UNSET:
+                return nick, member.user.username if member.user is not UNSET else ""
+            elif member.user is not UNSET and (global_name := member.user.global_name):
+                return global_name, member.user.username
+            else:
+                return "", str(user_id)
         else:
-            return ""
+            user = await bot.get_user(user_id=user_id)
+            return user.global_name or "", user.username
     except ActionFailed as e:
         if e.message == "Unknown User":
-            return f"({user_id})"
+            return "(error:未知用户)", str(user_id)
         else:
             raise e
 
 
 async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
-    async with aiohttp.ClientSession().get(url, proxy=proxy) as response:
+    async with (
+        aiohttp.ClientSession() as session,
+        session.get(url, proxy=proxy) as response,
+    ):
         return await response.read()

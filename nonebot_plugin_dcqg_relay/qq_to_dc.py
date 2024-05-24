@@ -1,6 +1,5 @@
 import asyncio
 import re
-from sqlite3 import Connection
 from typing import Optional
 
 import filetype
@@ -14,12 +13,13 @@ from nonebot.adapters.qq import (
     MessageDeleteEvent as qq_MessageDeleteEvent,
 )
 from nonebot.adapters.qq.models import Message as qq_Message, MessageReference
+from nonebot_plugin_orm import get_session
+from sqlalchemy import select
 
-from .config import Link, plugin_config
+from .config import Link
+from .model import MsgID
 from .qq_emoji_dict import qq_emoji_dict
 from .utils import get_dc_member_name, get_file_bytes
-
-channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
 
 
 async def get_qq_member_name(bot: qq_Bot, guild_id: str, user_id: str) -> str:
@@ -55,7 +55,6 @@ async def build_dc_embeds(
     dc_bot: dc_Bot,
     reference: MessageReference,
     reply: qq_Message,
-    conn: Connection,
     channel_link: Link,
 ) -> list[Embed]:
     """处理 QQ 转 discord 中的回复部分"""
@@ -64,30 +63,32 @@ async def build_dc_embeds(
     author = ""
     timestamp = f"<t:{int(reply.timestamp.timestamp())}:R>" if reply.timestamp else ""
 
-    if db_select := conn.execute(
-        f"SELECT DCID FROM ID WHERE QQID LIKE ('%{reference.message_id}%')"
-    ).fetchone():
-        reference_id = db_select[0]
-        dc_message = await dc_bot.get_channel_message(
-            channel_id=channel_id, message_id=reference_id
-        )
-        if reply.author.id == (await bot.me()).id:
-            author = EmbedAuthor(
-                name=await get_dc_member_name(dc_bot, guild_id, dc_message.author.id)
-                + f"(@{dc_message.author.username})",
-                icon_url=await get_dc_member_avatar(
-                    dc_bot, guild_id, dc_message.author.id
-                ),
+    async with get_session() as session:
+        if reference_id := await session.scalar(
+            select(MsgID.dcid).filter(MsgID.qqid == reference.message_id).fetch(1)
+        ):
+            dc_message = await dc_bot.get_channel_message(
+                channel_id=channel_id, message_id=reference_id
             )
-            timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
+            if reply.author.id == (await bot.me()).id:
+                name, _ = await get_dc_member_name(
+                    dc_bot, guild_id, dc_message.author.id
+                )
+                author = EmbedAuthor(
+                    name=name + f"(@{dc_message.author.username})",
+                    icon_url=await get_dc_member_avatar(
+                        dc_bot, guild_id, dc_message.author.id
+                    ),
+                )
+                timestamp = f"<t:{int(dc_message.timestamp.timestamp())}:R>"
 
-        description = (
-            f"{dc_message.content}\n\n"
-            + timestamp
-            + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
-        )
-    else:
-        description = f"{reply.content}\n\n" + timestamp + "[ ? ]"
+            description = (
+                f"{dc_message.content}\n\n"
+                + timestamp
+                + f"[[ ↑ ]](https://discord.com/channels/{guild_id}/{channel_id}/{reference_id})"
+            )
+        else:
+            description = f"{reply.content}\n\n" + timestamp + "[ ? ]"
 
     if not author:
         member = await bot.get_member(guild_id=reply.guild_id, user_id=reply.author.id)
@@ -183,7 +184,10 @@ async def send_to_discord(
 
 
 async def create_qq_to_dc(
-    bot: qq_Bot, event: qq_GuildMessageEvent, dc_bot: dc_Bot, conn: Connection
+    bot: qq_Bot,
+    event: qq_GuildMessageEvent,
+    dc_bot: dc_Bot,
+    channel_links: list[Link],
 ):
     """QQ 消息转发到 discord"""
 
@@ -193,7 +197,7 @@ async def create_qq_to_dc(
     )
 
     if (reply := event.reply) and (reference := event.message_reference):
-        embeds = await build_dc_embeds(bot, dc_bot, reference, reply, conn, link)
+        embeds = await build_dc_embeds(bot, dc_bot, reference, reply, link)
     else:
         embeds = None
 
@@ -221,32 +225,39 @@ async def create_qq_to_dc(
             try_times += 1
             await asyncio.sleep(5)
 
-    if send:
-        conn.execute(f'INSERT INTO ID (DCID, QQID) VALUES ({send.id}, "{event.id}")')
+    async with get_session() as session:
+        session.add(MsgID(dcid=send.id, qqid=event.id))
+        await session.commit()
 
 
 async def delete_qq_to_dc(
-    event: qq_MessageDeleteEvent, dc_bot: dc_Bot, conn: Connection, just_delete: list
+    event: qq_MessageDeleteEvent,
+    dc_bot: dc_Bot,
+    channel_links: list[Link],
+    just_delete: list,
 ):
     if (id := event.message.id) in just_delete:
         just_delete.remove(id)
         return
+    channel_id = next(
+        link.dc_channel_id
+        for link in channel_links
+        if link.qq_channel_id == event.message.channel_id
+    )
     try_times = 1
     while True:
         try:
-            db_selected = conn.execute(
-                f"SELECT DCID FROM ID WHERE QQID LIKE ('%{event.message.id}%')"
-            )
-            for msgids in db_selected:
-                for msgid in msgids:
-                    channel_id = next(
-                        link.dc_channel_id
-                        for link in channel_links
-                        if link.qq_channel_id == event.message.channel_id
-                    )
-                    await dc_bot.delete_message(message_id=msgid, channel_id=channel_id)
-                    just_delete.append(msgid)
-                    conn.execute(f"DELETE FROM ID WHERE DCID={msgid}")
+            async with get_session() as session:
+                if msgids := await session.scalars(
+                    select(MsgID).filter(MsgID.qqid == event.message.id)
+                ):
+                    for msgid in msgids:
+                        await dc_bot.delete_message(
+                            message_id=msgid.dcid, channel_id=channel_id
+                        )
+                        just_delete.append(msgid.dcid)
+                        await session.delete(msgid)
+                    await session.commit()
             break
         except UnboundLocalError or TypeError or NameError as e:
             logger.warning(f"retry {try_times}")

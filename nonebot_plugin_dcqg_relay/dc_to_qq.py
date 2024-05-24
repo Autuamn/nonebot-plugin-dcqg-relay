@@ -1,7 +1,6 @@
 import asyncio
 import io
 import re
-from sqlite3 import Connection
 from typing import Optional
 
 import filetype
@@ -12,7 +11,6 @@ from nonebot.adapters.discord import (
     MessageDeleteEvent as dc_MessageDeleteEvent,
 )
 from nonebot.adapters.discord.api import UNSET
-from nonebot.adapters.discord.exception import ActionFailed
 from nonebot.adapters.qq import (
     Bot as qq_Bot,
     Message as qq_SegmentMessage,
@@ -20,9 +18,12 @@ from nonebot.adapters.qq import (
 )
 from nonebot.adapters.qq.exception import AuditException
 from nonebot.adapters.qq.models import Message as qq_Message
+from nonebot_plugin_orm import get_session
+from sqlalchemy import select
 from PIL import Image
 
 from .config import Link, plugin_config
+from .model import MsgID
 from .utils import get_dc_member_name, get_file_bytes
 
 channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
@@ -64,42 +65,39 @@ async def build_qq_message(
     qq_message = qq_SegmentMessage(
         qq_MessageSegment.text(
             (
-                await get_dc_member_name(bot, event.guild_id, event.author.id)
-                if event.guild_id is not UNSET
-                else ""
+                event.member.nick
+                if event.member is not UNSET
+                and event.member.nick is not UNSET
+                and event.member.nick
+                else event.author.global_name or ""
             )
             + f"(@{event.author.username}):\n"
         )
     )
     img_list: list[str] = []
-    msg = (
-        event.content
+    message = (
+        event
         if event.content
         else (
             await bot.get_channel_message(
                 channel_id=event.channel_id, message_id=event.message_id
             )
-        ).content
+        )
     )
+    content = message.content
     text_begin = 0
     for embed in re.finditer(
         r"<(?P<type>(@!|@&|@|#|/|:|a:|t:))(?P<param>.+?)>",
-        msg,
+        content,
     ):
-        if content := msg[text_begin : embed.pos + embed.start()]:
+        if content := content[text_begin : embed.pos + embed.start()]:
             qq_message += qq_MessageSegment.text(content)
         text_begin = embed.pos + embed.end()
         if embed.group("type") in ("@!", "@"):
-            try:
-                qq_message += qq_MessageSegment.text(
-                    "@"
-                    + (await bot.get_user(user_id=int(embed.group("param")))).username
-                )
-            except ActionFailed as e:
-                if e.message == "Unknown User":
-                    qq_message += qq_MessageSegment.text(f'@({embed.group("param")})')
-                else:
-                    raise e
+            nick, username = await get_dc_member_name(
+                bot, event.guild_id, int(embed.group("param"))
+            )
+            qq_message += qq_MessageSegment.text("@" + nick + f"({username})")
         elif embed.group("type") == "@&":
             qq_message += qq_MessageSegment.text(
                 "@"
@@ -108,7 +106,7 @@ async def build_qq_message(
                         bot, event.guild_id, int(embed.group("param"))
                     )
                     if event.guild_id is not UNSET
-                    else "(error:未知用户组)"
+                    else f"(error:未知用户组)({embed.group('param')})"
                 )
             )
         elif embed.group("type") == "#":
@@ -119,7 +117,7 @@ async def build_qq_message(
                         bot, event.guild_id, int(embed.group("param"))
                     )
                     if event.guild_id is not UNSET
-                    else "(error:未知频道)"
+                    else f"(error:未知频道)({embed.group('param')})"
                 )
             )
         elif embed.group("type") == "/":
@@ -142,11 +140,12 @@ async def build_qq_message(
                 qq_message += qq_MessageSegment.text(f'<t:{embed.group("param")}>')
             else:
                 qq_message += qq_MessageSegment.text(embed.group())
-    if content := msg[text_begin:]:
+    if content := content[text_begin:]:
         qq_message += qq_MessageSegment.text(content)
 
     if event.mention_everyone:
         qq_message += qq_MessageSegment.mention_everyone()
+
     if attachments := event.attachments:
         for attachment in attachments:
             if attachment.content_type is not UNSET and re.match(
@@ -158,9 +157,7 @@ async def build_qq_message(
     return qq_message, img_list
 
 
-async def create_dc_to_qq(
-    bot: dc_Bot, event: dc_MessageCreateEvent, qq_bot: qq_Bot, conn: Connection
-):
+async def create_dc_to_qq(bot: dc_Bot, event: dc_MessageCreateEvent, qq_bot: qq_Bot):
     """discord 消息转发到 QQ"""
     event.get_message()
     message, img_list = await build_qq_message(bot, event)
@@ -172,19 +169,21 @@ async def create_dc_to_qq(
         img_data_list = await asyncio.gather(*get_img_tasks)
     else:
         img_data_list = ["0"]
-    if (
-        event.message_reference is not UNSET
-        and (message_id := event.message_reference.message_id)
-        and message_id is not UNSET
-        and (
-            db_select := conn.execute(
-                f"SELECT QQID FROM ID WHERE DCID LIKE {message_id}"
-            ).fetchone()
-        )
-        and (reference := db_select[0])
-    ):
-        message += qq_MessageSegment.reference(reference)
 
+    async with get_session() as session:
+        if (
+            event.message_reference is not UNSET
+            and (message_id := event.message_reference.message_id)
+            and message_id is not UNSET
+            and (
+                reference := await session.scalar(
+                    select(MsgID.qqid).filter(MsgID.dcid == message_id).fetch(1)
+                )
+            )
+        ):
+            message += qq_MessageSegment.reference(reference)
+
+    sends: list = []
     for i, img_data in enumerate(img_data_list):
         try_times = 1
         while True:
@@ -195,12 +194,13 @@ async def create_dc_to_qq(
                         if i == 0
                         else qq_SegmentMessage(qq_MessageSegment.file_image(img_data))
                     )
-                send = await qq_bot.send_to_channel(link.qq_channel_id, message)
+                sends.append(await qq_bot.send_to_channel(link.qq_channel_id, message))
                 break
             except AuditException as e:
                 try_times = 1
                 while True:
-                    if send := (await e.get_audit_result()).message_id:
+                    if id := (await e.get_audit_result()).message_id:
+                        sends.append(id)
                         break
                     else:
                         logger.warning(f"get_audit_result retry {try_times}")
@@ -220,15 +220,19 @@ async def create_dc_to_qq(
                 try_times += 1
                 await asyncio.sleep(5)
 
-        if send:
-            conn.execute(
-                "INSERT INTO ID (DCID, QQID) VALUES (?, ?)",
-                (event.id, send.id if isinstance(send, qq_Message) else send),
+    async with get_session() as session:
+        for send in sends:
+            session.add(
+                MsgID(
+                    dcid=event.id,
+                    qqid=send.id if isinstance(send, qq_Message) else send,
+                )
             )
+        await session.commit()
 
 
 async def delete_dc_to_qq(
-    event: dc_MessageDeleteEvent, qq_bot: qq_Bot, conn: Connection, just_delete: list
+    event: dc_MessageDeleteEvent, qq_bot: qq_Bot, just_delete: list
 ):
     if (id := event.id) in just_delete:
         just_delete.remove(id)
@@ -236,19 +240,22 @@ async def delete_dc_to_qq(
     try_times = 1
     while True:
         try:
-            db_selected = conn.execute(
-                f'SELECT QQID FROM ID WHERE DCID LIKE ("%{event.id}%")'
+            channel_id = next(
+                link.qq_channel_id
+                for link in channel_links
+                if link.dc_channel_id == event.channel_id
             )
-            for msgids in db_selected:
-                for msgid in msgids:
-                    channel_id = next(
-                        link.qq_channel_id
-                        for link in channel_links
-                        if link.dc_channel_id == event.channel_id
-                    )
-                    await qq_bot.delete_message(message_id=msgid, channel_id=channel_id)
-                    just_delete.append(msgid)
-                    conn.execute(f'DELETE FROM ID WHERE QQID="{msgid}"')
+            async with get_session() as session:
+                if msgids := await session.scalars(
+                    select(MsgID).filter(MsgID.dcid == event.id)
+                ):
+                    for msgid in msgids:
+                        await qq_bot.delete_message(
+                            message_id=msgid.qqid, channel_id=channel_id
+                        )
+                        just_delete.append(msgid.qqid)
+                        await session.delete(msgid)
+                    await session.commit()
             break
         except UnboundLocalError or TypeError or NameError as e:
             logger.warning(f"retry {try_times}")
