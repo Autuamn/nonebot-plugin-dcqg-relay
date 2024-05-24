@@ -1,7 +1,4 @@
 # QQ频道-Discord 互通
-<a href="https://raw.githubusercontent.com/Autuamn/nonebot-plugin-dcqg-relay/master/LICENSE">
-    <img src="https://img.shields.io/github/license/Autuamn/nonebot-plugin-dcqg-relay" alt="license">
-</a>
 <img src="https://img.shields.io/badge/python-3.9+-blue?logo=python&logoColor=edb641" alt="python">
 
 
@@ -47,14 +44,6 @@ pip install nonebot-plugin-dcqg-relay
 ```
 
 ## 配置
-> [!TIP]
-> 需要注意的是，本项目的使用[本地数据存储](https://github.com/nonebot/plugin-localstore)存储数据。如需更改目录请在配置文件中加入
-> ```dotenv
-> localstore_cache_dir=""   # 缓存目录
-> localstore_config_dir=""  # 配置目录
-> localstore_data_dir=""    # 数据目录
-> ```
-
 ### dcqg_relay_channel_links
 - 类型：`json`
 - 默认值：`[]`
@@ -82,17 +71,25 @@ dcqg_relay_channel_links='[
     }
 ]'
 ```
+关于 Webhook 是什么请看：[使用網絡鉤手（Webhooks）](https://support.discord.com/hc/zh-tw/articles/228383668-%E4%BD%BF%E7%94%A8%E7%B6%B2%E7%B5%A1%E9%89%A4%E6%89%8B-Webhooks)
+
+得到 Webhook URL 后，可从 URL 中获取 `webhook_id` 和 `webhook_token`
+
+Webhook URL 形如：
+`https://discord.com/api/webhooks/{webhook_id}/{webhook_token}`
+
+例如：
+
+当 Webhook URL 为 `https://discord.com/api/webhooks/1243529342621978694/kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h` 时
+
+`1243529342621978694` 就是 `webhook_id`
+
+`kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h` 就是 `webhook_token`
 
 ### dcqg_relay_unmatch_beginning
 - 类型：`list[str]`
 - 默认值：`["/"]`
 - 说明：指明不转发的消息开头
-
-## 命令
-目前只有一条命令：
-- /commit_db
-
-用于保存数据库
 
 ## 特别感谢
 - [nonebot2](https://github.com/nonebot/nonebot2)
