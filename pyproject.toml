@@ -30,7 +30,7 @@ line-ending = "lf"
 
 [tool.ruff.lint]
 select = ["F", "W", "E", "UP", "ASYNC", "B", "C4", "T10", "T20", "PYI", "PT", "Q", "SIM", "TID", "RUF",]
-ignore = ["E402", "B008", "B030", "RUF001", "RUF002", "RUF003",]
+ignore = ["E402", "B008", "RUF001", "RUF002", "RUF003",]
 
 [tool.ruff.lint.isort]
 force-sort-within-sections = true

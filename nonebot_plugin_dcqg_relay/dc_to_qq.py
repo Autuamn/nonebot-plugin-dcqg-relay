@@ -160,7 +160,7 @@ async def create_dc_to_qq(
     bot: dc_Bot, event: dc_MessageCreateEvent, qq_bot: qq_Bot, link: LinkWithWebhook
 ):
     """discord 消息转发到 QQ"""
-    event.get_message()
+    logger.debug("into create_dc_to_qq()")
     message, img_list = await build_qq_message(bot, event)
     if img_list:
         get_img_tasks = [get_qq_img(img, discord_proxy) for img in img_list]
@@ -212,7 +212,7 @@ async def create_dc_to_qq(
                         await asyncio.sleep(1)
                 break
             except NameError as e:
-                logger.warning(f"retry {try_times}")
+                logger.warning(f"create_dc_to_qq() error {e}, retry {try_times}")
                 if try_times >= 3:
                     raise e
                 try_times += 1
@@ -227,6 +227,7 @@ async def create_dc_to_qq(
                 )
             )
         await session.commit()
+    logger.debug("finish create_dc_to_qq()")
 
 
 async def delete_dc_to_qq(
@@ -235,6 +236,7 @@ async def delete_dc_to_qq(
     link: LinkWithWebhook,
     just_delete: list,
 ):
+    logger.debug("into delete_dc_to_qq()")
     if (id := event.id) in just_delete:
         just_delete.remove(id)
         return
@@ -252,9 +254,10 @@ async def delete_dc_to_qq(
                         just_delete.append(msgid.qqid)
                         await session.delete(msgid)
                     await session.commit()
+            logger.debug("finish delete_dc_to_qq()")
             break
-        except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"retry {try_times}")
+        except (UnboundLocalError, TypeError, NameError) as e:
+            logger.warning(f"delete_dc_to_qq() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1

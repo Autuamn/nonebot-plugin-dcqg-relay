@@ -1,7 +1,7 @@
 import re
 from typing import Union, Optional
 
-from nonebot import get_driver, logger, on, on_command, on_regex
+from nonebot import get_driver, logger, on, on_regex
 from nonebot.params import Depends
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
@@ -38,7 +38,6 @@ unmatch_beginning = plugin_config.dcqg_relay_unmatch_beginning
 
 just_delete = []
 
-commit_db_m = on_command("commit_db", priority=0, block=True)
 unmatcher = on_regex(
     rf'\A *?[{re.escape("".join(unmatch_beginning))}].*', priority=1, block=True
 )
@@ -47,7 +46,13 @@ matcher = on(rule=check_messages, priority=2, block=False)
 
 @driver.on_bot_connect
 async def prepare_webhooks(bot: dc_Bot):
-    await get_webhooks(bot)
+    logger.info("prepare webhooks: start")
+    failed = await get_webhooks(bot)
+    logger.info("prepare webhooks: done")
+    if failed:
+        logger.error(
+            f"{len(failed)} channels failed to get or create webhook: {failed}"
+        )
 
 
 @driver.on_bot_connect
@@ -73,7 +78,7 @@ async def create_message(
     event: Union[qq_GuildMessageEvent, dc_MessageCreateEvent],
     link: Optional[LinkWithWebhook] = Depends(get_link),
 ):
-    logger.debug("create_handle")
+    logger.debug("into create_message()")
     if link:
         if isinstance(bot, qq_Bot) and isinstance(event, qq_GuildMessageEvent):
             await create_qq_to_dc(bot, event, dc_bot, link)
@@ -89,6 +94,7 @@ async def delete_message(
     event: Union[qq_MessageDeleteEvent, dc_MessageDeleteEvent],
     link: Optional[LinkWithWebhook] = Depends(get_link),
 ):
+    logger.debug("into delete_message()")
     if link:
         if isinstance(bot, qq_Bot) and isinstance(event, qq_MessageDeleteEvent):
             await delete_qq_to_dc(event, dc_bot, link, just_delete)

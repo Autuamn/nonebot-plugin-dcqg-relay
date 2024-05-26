@@ -150,8 +150,6 @@ async def send_to_discord(
     avatar_url: Optional[str],
 ) -> MessageGet:
     """用 webhook 发送到 discord"""
-    logger.debug("send_to_discord")
-
     if img_list:
         get_img_tasks = [build_dc_file(img) for img in img_list]
         files = await asyncio.gather(*get_img_tasks)
@@ -173,13 +171,11 @@ async def send_to_discord(
             )
             break
         except NetworkError as e:
-            logger.warning(f"retry {try_times}")
+            logger.warning(f"send_to_discord() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
             await asyncio.sleep(5)
-
-    logger.debug("send")
     return send
 
 
@@ -190,7 +186,7 @@ async def create_qq_to_dc(
     link: LinkWithWebhook,
 ):
     """QQ 消息转发到 discord"""
-
+    logger.debug("into create_qq_to_dc()")
     text, img_list = await build_dc_message(bot, event)
 
     if (reply := event.reply) and (reference := event.message_reference):
@@ -216,7 +212,7 @@ async def create_qq_to_dc(
             )
             break
         except NameError as e:
-            logger.warning(f"retry {try_times}")
+            logger.warning(f"create_qq_to_dc() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
@@ -225,6 +221,7 @@ async def create_qq_to_dc(
     async with get_session() as session:
         session.add(MsgID(dcid=send.id, qqid=event.id))
         await session.commit()
+    logger.debug("finish create_qq_to_dc()")
 
 
 async def delete_qq_to_dc(
@@ -233,6 +230,7 @@ async def delete_qq_to_dc(
     link: LinkWithWebhook,
     just_delete: list,
 ):
+    logger.debug("into delete_qq_to_dc()")
     if (id := event.message.id) in just_delete:
         just_delete.remove(id)
         return
@@ -250,9 +248,10 @@ async def delete_qq_to_dc(
                         just_delete.append(msgid.dcid)
                         await session.delete(msgid)
                     await session.commit()
+            logger.debug("finish delete_qq_to_dc()")
             break
-        except UnboundLocalError or TypeError or NameError as e:
-            logger.warning(f"retry {try_times}")
+        except (UnboundLocalError, TypeError, NameError) as e:
+            logger.warning(f"delete_qq_to_dc() error: {e}, retry {try_times}")
             if try_times == 3:
                 raise e
             try_times += 1
