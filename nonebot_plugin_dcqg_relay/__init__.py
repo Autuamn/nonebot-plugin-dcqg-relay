@@ -1,7 +1,8 @@
 import re
-from typing import Union
+from typing import Union, Optional
 
 from nonebot import get_driver, logger, on, on_command, on_regex
+from nonebot.params import Depends
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
     MessageCreateEvent as dc_MessageCreateEvent,
@@ -14,10 +15,10 @@ from nonebot.adapters.qq import (
 )
 from nonebot.plugin import PluginMetadata
 
-from .config import Config, Link, plugin_config
+from .config import Config, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq
 from .qq_to_dc import create_qq_to_dc, delete_qq_to_dc
-from .utils import check_messages
+from .utils import check_messages, get_link, get_webhooks
 
 __plugin_meta__ = PluginMetadata(
     name="QQ频道-Discord 互通",
@@ -31,7 +32,7 @@ __plugin_meta__ = PluginMetadata(
 
 
 driver = get_driver()
-channel_links: list[Link] = plugin_config.dcqg_relay_channel_links
+
 discord_proxy = plugin_config.discord_proxy
 unmatch_beginning = plugin_config.dcqg_relay_unmatch_beginning
 
@@ -42,6 +43,11 @@ unmatcher = on_regex(
     rf'\A *?[{re.escape("".join(unmatch_beginning))}].*', priority=1, block=True
 )
 matcher = on(rule=check_messages, priority=2, block=False)
+
+
+@driver.on_bot_connect
+async def prepare_webhooks(bot: dc_Bot):
+    await get_webhooks(bot)
 
 
 @driver.on_bot_connect
@@ -65,24 +71,28 @@ async def unmatcher_pass():
 async def create_message(
     bot: Union[qq_Bot, dc_Bot],
     event: Union[qq_GuildMessageEvent, dc_MessageCreateEvent],
+    link: Optional[LinkWithWebhook] = Depends(get_link),
 ):
     logger.debug("create_handle")
-    if isinstance(bot, qq_Bot) and isinstance(event, qq_GuildMessageEvent):
-        await create_qq_to_dc(bot, event, dc_bot, channel_links)
-    elif isinstance(bot, dc_Bot) and isinstance(event, dc_MessageCreateEvent):
-        await create_dc_to_qq(bot, event, qq_bot)
-    else:
-        logger.error("bot type and event type not match")
+    if link:
+        if isinstance(bot, qq_Bot) and isinstance(event, qq_GuildMessageEvent):
+            await create_qq_to_dc(bot, event, dc_bot, link)
+        elif isinstance(bot, dc_Bot) and isinstance(event, dc_MessageCreateEvent):
+            await create_dc_to_qq(bot, event, qq_bot, link)
+        else:
+            logger.error("bot type and event type not match")
 
 
 @matcher.handle()
 async def delete_message(
     bot: Union[qq_Bot, dc_Bot],
     event: Union[qq_MessageDeleteEvent, dc_MessageDeleteEvent],
+    link: Optional[LinkWithWebhook] = Depends(get_link),
 ):
-    if isinstance(bot, qq_Bot) and isinstance(event, qq_MessageDeleteEvent):
-        await delete_qq_to_dc(event, dc_bot, channel_links, just_delete)
-    elif isinstance(bot, dc_Bot) and isinstance(event, dc_MessageDeleteEvent):
-        await delete_dc_to_qq(event, qq_bot, just_delete)
-    else:
-        logger.error("bot type and event type not match")
+    if link:
+        if isinstance(bot, qq_Bot) and isinstance(event, qq_MessageDeleteEvent):
+            await delete_qq_to_dc(event, dc_bot, link, just_delete)
+        elif isinstance(bot, dc_Bot) and isinstance(event, dc_MessageDeleteEvent):
+            await delete_dc_to_qq(event, qq_bot, link, just_delete)
+        else:
+            logger.error("bot type and event type not match")

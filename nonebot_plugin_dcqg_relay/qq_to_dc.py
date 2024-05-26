@@ -16,7 +16,7 @@ from nonebot.adapters.qq.models import Message as qq_Message, MessageReference
 from nonebot_plugin_orm import get_session
 from sqlalchemy import select
 
-from .config import Link
+from .config import LinkWithWebhook
 from .model import MsgID
 from .qq_emoji_dict import qq_emoji_dict
 from .utils import get_dc_member_name, get_file_bytes
@@ -55,10 +55,10 @@ async def build_dc_embeds(
     dc_bot: dc_Bot,
     reference: MessageReference,
     reply: qq_Message,
-    channel_link: Link,
+    link: LinkWithWebhook,
 ) -> list[Embed]:
     """处理 QQ 转 discord 中的回复部分"""
-    guild_id, channel_id = channel_link.dc_guild_id, channel_link.dc_channel_id
+    guild_id, channel_id = link.dc_guild_id, link.dc_channel_id
 
     author = ""
     timestamp = f"<t:{int(reply.timestamp.timestamp())}:R>" if reply.timestamp else ""
@@ -187,14 +187,11 @@ async def create_qq_to_dc(
     bot: qq_Bot,
     event: qq_GuildMessageEvent,
     dc_bot: dc_Bot,
-    channel_links: list[Link],
+    link: LinkWithWebhook,
 ):
     """QQ 消息转发到 discord"""
 
     text, img_list = await build_dc_message(bot, event)
-    link = next(
-        link for link in channel_links if link.qq_channel_id == event.channel_id
-    )
 
     if (reply := event.reply) and (reference := event.message_reference):
         embeds = await build_dc_embeds(bot, dc_bot, reference, reply, link)
@@ -233,17 +230,12 @@ async def create_qq_to_dc(
 async def delete_qq_to_dc(
     event: qq_MessageDeleteEvent,
     dc_bot: dc_Bot,
-    channel_links: list[Link],
+    link: LinkWithWebhook,
     just_delete: list,
 ):
     if (id := event.message.id) in just_delete:
         just_delete.remove(id)
         return
-    channel_id = next(
-        link.dc_channel_id
-        for link in channel_links
-        if link.qq_channel_id == event.message.channel_id
-    )
     try_times = 1
     while True:
         try:
@@ -253,7 +245,7 @@ async def delete_qq_to_dc(
                 ):
                     for msgid in msgids:
                         await dc_bot.delete_message(
-                            message_id=msgid.dcid, channel_id=channel_id
+                            message_id=msgid.dcid, channel_id=link.dc_channel_id
                         )
                         just_delete.append(msgid.dcid)
                         await session.delete(msgid)

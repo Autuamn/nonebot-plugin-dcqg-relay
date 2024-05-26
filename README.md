@@ -56,35 +56,18 @@ dcqg_relay_channel_links='[
         qq_guild_id: "123132",
         dc_guild_id: 456456,
         qq_channel_id: "78789",
-        dc_channel_id: 123123,
-        webhook_id: 456456,
-        webhook_token: "xxx"
+        dc_channel_id: 123123
     },
     {
         qq_guild_id: str    # QQ频道 id
         dc_guild_id: int    # Discord 服务器 id
         qq_channel_id: str  # QQ子频道 id
         dc_channel_id: int  # Discord 频道 id
-        webhook_id: int     # WebHook id
-        webhook_token: str  # WebHook token
                             # 请不要将注释放在此处！！
     }
 ]'
 ```
-关于 Webhook 是什么请看：[使用網絡鉤手（Webhooks）](https://support.discord.com/hc/zh-tw/articles/228383668-%E4%BD%BF%E7%94%A8%E7%B6%B2%E7%B5%A1%E9%89%A4%E6%89%8B-Webhooks)
 
-得到 Webhook URL 后，可从 URL 中获取 `webhook_id` 和 `webhook_token`
-
-Webhook URL 形如：
-`https://discord.com/api/webhooks/{webhook_id}/{webhook_token}`
-
-例如：
-
-当 Webhook URL 为 `https://discord.com/api/webhooks/1243529342621978694/kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h` 时
-
-`1243529342621978694` 就是 `webhook_id`
-
-`kq1Vc3NsN4d3SB0MAusB-xbY_e8xMChQmxypIFna0c1lwQS-uL85fqupK2jFfkYtUR1h` 就是 `webhook_token`
 
 ### dcqg_relay_unmatch_beginning
 - 类型：`list[str]`
