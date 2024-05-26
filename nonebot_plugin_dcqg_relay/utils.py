@@ -17,10 +17,10 @@ from nonebot.adapters.qq import (
     MessageDeleteEvent as qq_MessageDeleteEvent,
 )
 
-from .config import Link, LinkWithWebhook, plugin_config
+from .config import LinkWithWebhook, LinkWithoutWebhook, plugin_config
 
 
-without_webhook_links: list[Link] = plugin_config.dcqg_relay_channel_links
+without_webhook_links: list[LinkWithoutWebhook] = plugin_config.dcqg_relay_channel_links
 with_webhook_links: list[LinkWithWebhook] = []
 discord_proxy = plugin_config.discord_proxy
 
@@ -52,7 +52,7 @@ async def get_link(
         qq_MessageDeleteEvent,
         dc_MessageDeleteEvent,
     ],
-) -> Optional[Link]:
+) -> Optional[LinkWithWebhook]:
     """获取 link"""
     logger.debug("into get_link()")
     if isinstance(event, qq_GuildMessageEvent):
@@ -127,7 +127,11 @@ async def get_file_bytes(url: str, proxy: Optional[str] = None) -> bytes:
         return await response.read()
 
 
-async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
+async def get_webhook(
+    bot: dc_Bot, link: LinkWithoutWebhook
+) -> Optional[LinkWithWebhook]:
+    if link.webhook_id and link.webhook_token:
+        return LinkWithWebhook(**link.model_dump())
     try:
         channel_webhooks = await bot.get_channel_webhooks(channel_id=link.dc_channel_id)
         bot_webhook = next(
@@ -139,7 +143,7 @@ async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
             None,
         )
         if bot_webhook:
-            return build_link(link, bot_webhook)
+            return await build_link(link, bot_webhook)
     except Exception as e:
         logger.error(
             f"get webhook error, Discord channel id: {link.dc_channel_id}, error: {e}"
@@ -148,23 +152,25 @@ async def get_webhook(bot: dc_Bot, link: Link) -> Optional[LinkWithWebhook]:
         create_webhook = await bot.create_webhook(
             channel_id=link.dc_channel_id, name=str(link.dc_channel_id)
         )
-        return build_link(link, create_webhook)
+        return await build_link(link, create_webhook)
     except Exception as e:
         logger.error(
             f"create webhook error, Discord channel id: {link.dc_channel_id}, "
             + f"error: {e}"
         )
-    logger.warning(
+    logger.error(
         f"failed to get or create webhook, Discord channel id: {link.dc_channel_id}"
     )
 
 
-def build_link(link: Link, webhook: Webhook) -> Optional[LinkWithWebhook]:
+async def build_link(
+    link: LinkWithoutWebhook, webhook: Webhook
+) -> Optional[LinkWithWebhook]:
     if webhook and webhook.token:
         return LinkWithWebhook(
             webhook_id=webhook.id,
             webhook_token=webhook.token,
-            **link.model_dump(),
+            **link.model_dump(exclude_none=True),
         )
 
 
