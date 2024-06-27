@@ -174,7 +174,7 @@ async def build_link(
     return LinkWithWebhook(
         webhook_id=webhook_id,
         webhook_token=webhook_token,
-        **link.model_dump(exclude_none=True),
+        **link.model_dump(exclude={"webhook_id", "webhook_token"}),
     )
 
 
