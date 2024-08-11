@@ -39,11 +39,11 @@ async def check_messages(
     logger.debug("checked event type")
     if isinstance(event, dc_MessageCreateEvent):
         if not (
-            re.match(r".*? \[ID:\d*?\]$", event.author.username)
+            re.match(r".*?\[ID:\d*?\]$", event.author.username)
             and event.author.bot is True
         ):
             return True
-        logger.debug("is bot message")
+        logger.debug("is self relay message")
         return False
     return True
 
@@ -59,46 +59,21 @@ async def get_link(
 ) -> Optional[LinkWithWebhook]:
     """获取 link"""
     logger.debug("into get_link()")
-    if isinstance(event, qq_GuildMessageEvent):
-        return next(
-            (
-                link
-                for link in with_webhook_links
-                if link.qq_channel_id == event.channel_id
-            ),
-            None,
-        )
-    elif isinstance(event, dc_MessageCreateEvent):
-        if not (
-            re.match(r".*? \[ID:\d*?\]$", event.author.username)
-            and event.author.bot is True
-        ):
-            return next(
-                (
-                    link
-                    for link in with_webhook_links
-                    if link.dc_channel_id == event.channel_id
-                ),
-                None,
-            )
-    elif isinstance(event, qq_MessageDeleteEvent):
-        return next(
-            (
-                link
-                for link in with_webhook_links
-                if link.qq_channel_id == event.message.channel_id
-            ),
-            None,
-        )
-    elif isinstance(event, dc_MessageDeleteEvent):
-        return next(
-            (
-                link
-                for link in with_webhook_links
-                if link.dc_channel_id == event.channel_id
-            ),
-            None,
-        )
+    if isinstance(event, qq_MessageDeleteEvent):
+        return await pick_link(event.message.channel_id)
+    else:
+        return await pick_link(event.channel_id)
+
+
+async def pick_link(channel_id: Union[int, str]) -> Optional[LinkWithWebhook]:
+    return next(
+        (
+            link
+            for link in with_webhook_links
+            if link.dc_channel_id == channel_id or link.qq_channel_id == channel_id
+        ),
+        None,
+    )
 
 
 async def get_dc_member_name(
