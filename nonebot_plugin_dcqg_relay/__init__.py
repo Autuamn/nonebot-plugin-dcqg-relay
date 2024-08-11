@@ -1,7 +1,7 @@
 import re
 from typing import Union, Optional
 
-from nonebot import get_driver, logger, on, on_regex
+from nonebot import get_driver, logger, on, on_regex, require
 from nonebot.params import Depends
 from nonebot.adapters.discord import (
     Bot as dc_Bot,
@@ -14,6 +14,8 @@ from nonebot.adapters.qq import (
     MessageDeleteEvent as qq_MessageDeleteEvent,
 )
 from nonebot.plugin import PluginMetadata
+
+require("nonebot_plugin_orm")
 
 from .config import Config, LinkWithWebhook, plugin_config
 from .dc_to_qq import create_dc_to_qq, delete_dc_to_qq

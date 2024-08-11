@@ -65,7 +65,7 @@ async def build_dc_embeds(
 
     async with get_session() as session:
         if reference_id := await session.scalar(
-            select(MsgID.dcid).filter(MsgID.qqid == reference.message_id).fetch(1)
+            select(MsgID.dcid).filter(MsgID.qqid == reference.message_id).limit(1)
         ):
             dc_message = await dc_bot.get_channel_message(
                 channel_id=channel_id, message_id=reference_id
