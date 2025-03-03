@@ -41,7 +41,7 @@ unmatch_beginning = plugin_config.dcqg_relay_unmatch_beginning
 just_delete = []
 
 unmatcher = on_regex(
-    rf'\A *?[{re.escape("".join(unmatch_beginning))}].*', priority=1, block=True
+    rf"\A *?[{re.escape(''.join(unmatch_beginning))}].*", priority=1, block=True
 )
 matcher = on(rule=check_messages, priority=2, block=False)
 
