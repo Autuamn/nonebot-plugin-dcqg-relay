@@ -136,7 +136,7 @@ async def build_qq_message(
                 qq_message += qq_MessageSegment.text(embed.group())
         else:
             if embed.group().isdigit():
-                qq_message += qq_MessageSegment.text(f'<t:{embed.group("param")}>')
+                qq_message += qq_MessageSegment.text(f"<t:{embed.group('param')}>")
             else:
                 qq_message += qq_MessageSegment.text(embed.group())
     if content := content[text_begin:]:
