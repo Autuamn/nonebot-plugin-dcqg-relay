@@ -62,20 +62,20 @@ pip install git+https://github.com/Autuamn/nonebot-plugin-dcqg-relay.git@main
 ```dotenv
 dcqg_relay_channel_links='[
     {
-        qq_guild_id: "123132",
-        dc_guild_id: 456456,
-        qq_channel_id: "78789",
-        dc_channel_id: 123123,
-        webhook_id: 456456,
-        webhook_token: "xxx"
+        "qq_guild_id": "123132",
+        "dc_guild_id": 456456,
+        "qq_channel_id": "78789",
+        "dc_channel_id": 123123,
+        "webhook_id": 456456,
+        "webhook_token": "xxx"
     },
     {
-        qq_guild_id: str                # QQ频道 id
-        dc_guild_id: int                # Discord 服务器 id
-        qq_channel_id: str              # QQ子频道 id
-        dc_channel_id: int              # Discord 频道 id
-        webhook_id: Optional[int]       # （可选的）Discord 对应频道的 WebHook id
-        webhook_token: Optional[str]    # （可选的）对应 Webhook 的 token
+        "qq_guild_id": str                # QQ频道 id
+        "dc_guild_id": int                # Discord 服务器 id
+        "qq_channel_id": str              # QQ子频道 id
+        "dc_channel_id": int              # Discord 频道 id
+        "webhook_id": Optional[int]       # （可选的）Discord 对应频道的 WebHook id
+        "webhook_token": Optional[str]    # （可选的）对应 Webhook 的 token
                                         # 请不要将注释放在此处！！
     }
 ]'
