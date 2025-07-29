@@ -15,6 +15,10 @@ nonebot-plugin-orm = {extras = ["default"], version = "^0.7.3"}
 nonebot-plugin-localstore = "^0.6.0"
 filetype = "^1.2.0"
 pillow = "^10.3.0"
+cryptography = [
+  {version = "<44.0.0", markers = "python_full_version == '3.9.0' or python_full_version == '3.9.1'"},
+  {version = "^44.0.1", python = "!=3.9.0,!=3.9.1"}
+]
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.12.0"
